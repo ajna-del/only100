@@ -1,0 +1,104 @@
+import os
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
+auth.authenticate_user()
+gauth = GoogleAuth()
+gauth.credentials = GoogleCredentials.get_application_default()
+drive = GoogleDrive(gauth)
+
+download = drive.CreateFile({'id': '1PXrItwSZ3FP3dH5Lx-Zm2v4F42XtSJyY'})
+download.GetContentFile('EyesOnly100.7z') # Save content of this file as a local file - images
+os.mkdir('/content/RenamedImages')
+!7z e EyesOnly100.7z -o'/content/RenamedImages'
+
+os.mkdir('/content/RenamedImages/ClassN') # how to make 2 folders from 1 folder
+os.mkdir('/content/RenamedImages/ClassP') 
+for filename in os.listdir('/content/RenamedImages'): # files extracted from zip file
+  directory = '/content/RenamedImages'
+  directoryN = '/content/RenamedImages/ClassN'
+  directoryP = '/content/RenamedImages/ClassP'
+  if filename.startswith('N'):
+    os.rename(os.path.join(directory,filename), os.path.join(directoryN,filename))
+  elif filename.startswith('P'):
+    os.rename(os.path.join(directory,filename), os.path.join(directoryP,filename))
+!pip install split-folders tqdm
+
+import split_folders
+split_folders.ratio('/content/RenamedImages', output="output", seed=1337, ratio=(.8, .1, .1)) # default values
+
+# convert images to pil image
+# then resize images
+import torch
+import torchvision
+import torchvision.transforms as transforms
+transform = transforms.Compose([ transforms.Resize((1984, 2976)),transforms.ToTensor(),transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))]) #change transforms here for dimensions
+#training
+trainset = torchvision.datasets.ImageFolder(root='/content/output/train', transform = transform, target_transform=None) #transform here can crop image
+trainloader = torch.utils.data.DataLoader(trainset, batch_size = 4,shuffle = True, num_workers = 0) #CHANGED HERE
+
+# trainloader = transforms.ToPILImage()(trainset)
+
+# self.transform = transforms.Compose([trainloader.ToTensor()])
+
+#testing
+testset = torchvision.datasets.ImageFolder(root='/content/output/test', transform = transform, target_transform=None)
+testloader = torch.utils.data.DataLoader(testset, batch_size = 4,shuffle = False, num_workers = 2)
+#validation
+valset = torchvision.datasets.ImageFolder(root='/content/output/val', transform = transform, target_transform=None)
+testloader = torch.utils.data.DataLoader(valset, batch_size = 4,shuffle = False, num_workers = 2)
+classes = ('normal','diseased')
+
+#defining convolution neural network
+import torch.nn as nn
+import torch.nn.functional as F
+
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(3,6,5)
+        self.pool = nn.MaxPool2d(2,2)
+        self.conv2 = nn.Conv2d(6,16,5)
+        self.fc1 = nn.Linear(16*5*5,120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84,10)
+        self.transform = nn.transforms.Compose([transforms.ToTensor()])
+        
+def forward(self,x):
+    x = self.pool(F.relu(self.conv1(x)))
+    x = self.pool(F.relu(self.conv2(x)))
+    x = x.view(-1,16*5*5)
+    x = F.relu(self.fc1(x))
+    x = F.relu(self.fc2(x))
+    x = self.fc3(x)
+    return x
+
+net = Net() 
+
+#define loss function and optimizer
+#We're using Classification Cross-Entropy loss and SGD with momentum
+import torch.optim as optim
+
+criterion = nn.CrossEntropyLoss()
+params = list(net.parameters()) # parameters are initialized based on layers in net
+
+optimizer = optim.SGD(net.parameters(), lr = 0.001, momentum = 0.9)
+
+#%% Train the network
+for epoch in range(2): #trains over dataset twice
+    running_loss = 0.0
+    for i, data in enumerate(trainloader, 0): 
+        inputs ,labels = data #get inputs
+        optimizer.zero_grad() #zero prarameter gradients
+        outputs = net(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        
+        #print statistics
+        running_loss += loss.item()
+        if i % 2000 == 1999: #print every 2000 mini batches
+            print('[%d, %5d] loss:%3f'% (epoch +1,i+1, running_loss/2000))
+            running_loss = 0.0
+print('Finished Training')
