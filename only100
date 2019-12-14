@@ -23,8 +23,8 @@ for filename in os.listdir('/content/RenamedImages'): # files extracted from zip
     os.rename(os.path.join(directory,filename), os.path.join(directoryN,filename))
   elif filename.startswith('P'):
     os.rename(os.path.join(directory,filename), os.path.join(directoryP,filename))
-!pip install split-folders tqdm
 
+!pip install split-folders tqdm
 import split_folders
 split_folders.ratio('/content/RenamedImages', output="output", seed=1337, ratio=(.8, .1, .1)) # default values
 
@@ -83,7 +83,6 @@ class Net(nn.Module):
         return x
 
 net = Net()
-# too much RAm used!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #define loss function and optimizer
 #We're using Classification Cross-Entropy loss and SGD with momentum
