@@ -8,6 +8,13 @@ gauth = GoogleAuth()
 gauth.credentials = GoogleCredentials.get_application_default()
 drive = GoogleDrive(gauth)
 
+# for 1000 images
+# download = drive.CreateFile({'id': '13-mrV4pFxHxRRTM8LY_QVpkJhwMOEOoO'})
+# download.GetContentFile('EyesOnly1000.7z') # Save content of this file as a local file - images
+# os.mkdir('/content/RenamedImages')
+# !7z e EyesOnly1000.7z -o'/content/RenamedImages'
+
+#for 100 images 
 download = drive.CreateFile({'id': '1PXrItwSZ3FP3dH5Lx-Zm2v4F42XtSJyY'})
 download.GetContentFile('EyesOnly100.7z') # Save content of this file as a local file - images
 os.mkdir('/content/RenamedImages')
@@ -28,8 +35,6 @@ for filename in os.listdir('/content/RenamedImages'): # files extracted from zip
 import split_folders
 split_folders.ratio('/content/RenamedImages', output="output", seed=1337, ratio=(.8, .1, .1)) # default values
 
-# convert images to pil image
-# then resize images
 import torch
 import torchvision
 import torchvision.transforms as transforms
@@ -37,17 +42,12 @@ transform = transforms.Compose([ transforms.Resize((1984, 2976)),transforms.ToTe
 #training
 trainset = torchvision.datasets.ImageFolder(root='/content/output/train', transform = transform, target_transform=None) #transform here can crop image
 trainloader = torch.utils.data.DataLoader(trainset, batch_size = 4,shuffle = True, num_workers = 0) #CHANGED HERE
-
-# trainloader = transforms.ToPILImage()(trainset)
-
-# self.transform = transforms.Compose([trainloader.ToTensor()])
-
 #testing
 testset = torchvision.datasets.ImageFolder(root='/content/output/test', transform = transform, target_transform=None)
 testloader = torch.utils.data.DataLoader(testset, batch_size = 4,shuffle = False, num_workers = 2)
 #validation
 valset = torchvision.datasets.ImageFolder(root='/content/output/val', transform = transform, target_transform=None)
-testloader = torch.utils.data.DataLoader(valset, batch_size = 4,shuffle = False, num_workers = 2)
+valloader = torch.utils.data.DataLoader(valset, batch_size = 4,shuffle = False, num_workers = 2)
 classes = ('normal','diseased')
 
 #defining convolution neural network
@@ -110,3 +110,28 @@ for epoch in range(2): #trains over dataset twice
             print('[%d, %5d] loss:%3f'% (epoch +1,i+1, running_loss/2000))
             running_loss = 0.0
 print('Finished Training')
+
+class_correct = list(0. for i in range(len(classes))) #no of classes
+class_total = list(0. for i in range(len(classes)))
+testloss = 0.0
+with torch.no_grad():
+    for data in testloader:
+        images, labels = data
+        # print(labels) # why is it all ones, because it is only one class brooo
+        outputs = net(images)
+        _, predicted = torch.max(outputs, 1) # underscore to ignore a value when unpacking, returns (values, indices) in 1st dimension
+        c = (predicted == labels).squeeze()
+        for i in range(len(classes)): # what is this??
+            label = labels[i]
+            class_correct[label] += c[i].item()
+            class_total[label] += 1
+
+for i in range(2):
+    print('Accuracy of %5s : %2d %%' % (
+        classes[i], 100 * class_correct[i]/ class_total[i]))
+    
+import numpy as np
+# access Variable's tensor, copy back to CPU, convert to numpy
+arr = outputs.data.cpu().numpy()
+# write CSV
+np.savetxt('output.csv', arr)
